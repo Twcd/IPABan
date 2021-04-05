@@ -20,6 +20,7 @@ namespace IPABan
                 new Service1()
             };
             ServiceBase.Run(ServicesToRun);
+
         }
     }
 }

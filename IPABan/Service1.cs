@@ -35,6 +35,7 @@ namespace IPABan
             Thread trd = new Thread(new ThreadStart(this.FirewallUpdater));
             trd.IsBackground = true;
             trd.Start();
+            
 
         }
 
