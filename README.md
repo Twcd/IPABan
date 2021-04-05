@@ -10,7 +10,7 @@ The program work as a windows service and he is very light (less  than 1MB for t
 * Detecting attempt and ban IP for 2 hours
 
 ## Information
-Actually we cannot configure the app without coding (ex. Change how many attemp before ban ...)
+At this point we cannot configure the app without coding (ex. Change how many attemp before ban ...)
 
 ## Coming soon
 * Banning permantly IP after multiple ban.
