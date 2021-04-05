@@ -23,7 +23,7 @@ To use IPABan compile it, open powershell and execute this command to install th
 ```powershell
 New-Service -Name "IPABan" -BinaryPathName <Path to IPABan>.exe
 ```
-Now you can go to your task manager -> Service -> IPABan right click and press start
+Now you can go to your task manager -> Services -> IPABan right click and press start
 
 ## If you want to support me
 You can donate Ethereum to this address : 0xacbb51c9d3e9c1e1881f4bfac302d0009ccd07af </br>
