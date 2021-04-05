@@ -18,7 +18,7 @@ At this point we cannot configure the app without coding (ex. Change how many at
 * Report when an ip got ban to Abuse IPDB database
 
 ## Installation
-To use IPABan compile it, open powershell and execute this command to install the service.
+To use IPABan compile it or download from release page, open powershell and execute this command to install the service.
 
 ```powershell
 New-Service -Name "IPABan" -BinaryPathName <Path to IPABan>.exe
