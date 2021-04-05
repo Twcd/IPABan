@@ -28,3 +28,5 @@ Now you can go to your task manager -> Services -> IPABan right click and press 
 ## If you want to support me
 You can donate Ethereum to this address : 0xacbb51c9d3e9c1e1881f4bfac302d0009ccd07af </br>
 Or donate Bitcoin to this address : 1NW9sWeyo38ck2p6G9gB9xT1Kp1LQYiVpT
+
+OR you can contribute to the project.
