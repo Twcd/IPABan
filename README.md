@@ -9,7 +9,7 @@ The program work as a windows service and he is very light (less  than 1MB for t
 ## Features
 * Detecting attempt and ban IP for 2 hours
 * Automaticly banning IP who reported as "hacker" using Abuse IPDB database at the first connection.
-* 
+
 ## Information
 At this point we cannot configure the app without coding (ex. Change how many attemp before ban ...)
 
