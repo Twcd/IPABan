@@ -8,35 +8,160 @@ using System.Collections.Generic;
 using WindowsFirewallHelper;
 using WindowsFirewallHelper.Addresses;
 using System.Threading;
+using RestSharp;
+using Newtonsoft.Json;
 
 namespace IPABan
 {
     public partial class Service1 : ServiceBase
     {
+        #region JSONClass
+        public class Report
+        {
+            public DateTime reportedAt { get; set; }
+            public string comment { get; set; }
+            public IList<int> categories { get; set; }
+            public int reporterId { get; set; }
+            public string reporterCountryCode { get; set; }
+            public string reporterCountryName { get; set; }
+        }
+
+        public class Data
+        {
+            public string ipAddress { get; set; }
+            public bool isPublic { get; set; }
+            public int ipVersion { get; set; }
+            public bool? isWhitelisted { get; set; }
+            public int abuseConfidenceScore { get; set; }
+            public string countryCode { get; set; }
+            public string usageType { get; set; }
+            public string isp { get; set; }
+            public string domain { get; set; }
+            public IList<object> hostnames { get; set; }
+            public string countryName { get; set; }
+            public int totalReports { get; set; }
+            public int numDistinctUsers { get; set; }
+            public DateTime? lastReportedAt { get; set; }
+            public IList<Report> reports { get; set; }
+        }
+
+        public class CheckIPRequest
+        {
+            public Data data { get; set; }
+        }
+
         class ipStat
         {
             public int attemptCount;
             public long timeStamp;
             public string ip;
         }
+
+        public class Meta
+        {
+            public DateTime generatedAt { get; set; }
+        }
+
+        public class Datum
+        {
+            
+            public string ipAddress { get; set; }
+            public string countryCode { get; set; }
+            public int abuseConfidenceScore { get; set; }
+            public DateTime lastReportedAt { get; set; }
+        }
+
+        public class BlackListIPRequest
+        {
+            public Meta meta { get; set; }
+            public IList<Datum> data { get; set; }
+        }
+
+        #endregion
+        class BannedIP
+        {
+            public IAddress ipAddress;
+            public long expire;
+        }
+
+
+
+ const string APIKey = "";
+
+
+
         List<ipStat> ipAttempt = new List<ipStat>();
-        List<IAddress> bannedIP = new List<IAddress>();
+        List<BannedIP> bannedIPList = new List<BannedIP>();
 
         public Service1()
         {
             InitializeComponent();
         }
 
+        //Return true if IP was not reported more than 3 times.
+        bool CheckIP(string _ip)
+        {
+            try
+            {
+
+                var client = new RestClient("https://api.abuseipdb.com/api/v2/check");
+                var request = new RestRequest(Method.GET);
+                request.AddHeader("Key", APIKey);
+                request.AddHeader("Accept", "application/json");
+                request.AddParameter("ipAddress", _ip);
+                request.AddParameter("maxAgeInDays", "90");
+                request.AddParameter("verbose", "");
+
+                IRestResponse response = client.Execute(request);               
+                var json = JsonConvert.DeserializeObject<CheckIPRequest>(response.Content);
+
+               
+                return true;
+            }
+            catch(Exception e)
+            {
+                WriteToFile(e.ToString());
+                return true;
+            
+            }
+        }
+
+
         protected override void OnStart(string[] args)
         {
             WriteToFile("Service is started. " + DateTime.Now);
+
+            //BanBlackList();
             FindRule();
             RegisterListener();
             Thread trd = new Thread(new ThreadStart(this.FirewallUpdater));
             trd.IsBackground = true;
             trd.Start();
+
             
 
+        }
+
+
+
+        string GetBlackList()
+        {
+            var client = new RestClient("https://api.abuseipdb.com/api/v2/blacklist");
+            var request = new RestRequest(Method.GET);
+            request.AddHeader("Key", APIKey);
+            request.AddHeader("Accept", "application/json");
+            request.AddParameter("confidenceMinimum", "90");
+
+            IRestResponse response = client.Execute(request);
+
+            dynamic parsedJson = JsonConvert.DeserializeObject(response.Content);
+
+            foreach (var item in parsedJson)
+            {
+                Console.WriteLine(item);
+            }
+
+            return response.Content;
         }
 
 
@@ -45,11 +170,11 @@ namespace IPABan
             while(true)
             {
                 Thread.Sleep(6000);
-                foreach(ipStat ip in ipAttempt)
+                foreach(BannedIP ip in bannedIPList)
                 {
-                    if(ip.timeStamp >= DateTime.Now.ToFileTime() + 36000)
+                    if(ip.expire >= DateTime.Now.ToFileTime() + Config.banDuration)
                     {
-                        bannedIP.Remove(SingleIP.Parse(ip.ip));
+                        bannedIPList.Remove(ip);
                         FirewallUpdate();
                     }
                 }
@@ -67,9 +192,6 @@ namespace IPABan
 
             if (log.Entries[e1].InstanceId == 4625)
             {
-
-
-
                 string query = @"*[System[(EventID = 4625)]]";
                 EventLogQuery eventsQuery = new EventLogQuery("Security", PathType.LogName, query);
                 try
@@ -94,56 +216,47 @@ namespace IPABan
                                     }
                                     if (reader.GetAttribute(0) == "IpAddress")
                                     {
+
+                                        
+
                                         string ipAddress = reader.ReadElementContentAsString();
-                                        int idxIP = FindIP(ipAddress);
-                                        if (idxIP == -1)
+                                        if (!CheckIP(ipAddress))
                                         {
-                                            ipStat newStat = new ipStat();
-                                            newStat.timeStamp = DateTime.Now.ToFileTime();
-                                            newStat.ip = ipAddress;
-                                            newStat.attemptCount = 1;
-                                            ipAttempt.Add(newStat);
+                                            BannedIP ban = new BannedIP();
+                                            ban.ipAddress = SingleIP.Parse(ipAddress);
+                                            ban.expire = DateTime.Now.ToFileTime() + Config.banDuration;
+                                            bannedIPList.Add(ban);
+                                            WriteToFile("Banning");
                                         }
                                         else
                                         {
-
-                                            ipAttempt[idxIP].attemptCount++;
-                                            if (ipAttempt[idxIP].attemptCount >= 5)
+                                            int idxIP = FindIP(ipAddress);
+                                            if (idxIP == -1)
                                             {
-                                                WriteToFile("BAN THIS IP");
+                                                ipStat newStat = new ipStat();
+                                                newStat.timeStamp = DateTime.Now.ToFileTime();
+                                                newStat.ip = ipAddress;
+                                                newStat.attemptCount = 1;
+                                                ipAttempt.Add(newStat);
+                                            }
+                                            else
+                                            {
 
-                                                IRule rule1 = FindRule();
-
-                                                bannedIP.Add(SingleIP.Parse(ipAddress.ToString()));
-                                                if (rule1 == null)
+                                                ipAttempt[idxIP].attemptCount++;
+                                                if (ipAttempt[idxIP].attemptCount >= 5)
                                                 {
-                                                    WriteToFile("Create rule");
+                                                    IRule rule1 = FindRule();
 
-                                                    var rule = FirewallManager.Instance.CreateApplicationRule(
-                                                         FirewallManager.Instance.GetProfile().Type,
-                                                         @"IPABan",
-                                                         FirewallAction.Block,
-                                                         null
-                                                    );
-                                                    rule.Direction = FirewallDirection.Inbound;
-                                                    rule.LocalPorts = new ushort[] { 3389 };
-                                                    rule.Action = FirewallAction.Block;
-                                                    rule.Protocol = FirewallProtocol.Any;
-                                                    rule.Scope = FirewallScope.All;
-                                                    rule.Profiles = FirewallProfiles.Public | FirewallProfiles.Private;
-
-                                                    rule.RemoteAddresses = bannedIP.ToArray();
-                                                    FirewallManager.Instance.Rules.Add(rule);
-                                                    WriteToFile("Rule created");
-                                                }
-                                                else
-                                                {
-                                                    FirewallUpdate();
+                                                    BannedIP ban = new BannedIP();
+                                                    ban.ipAddress = SingleIP.Parse(ipAddress);
+                                                    ban.expire = DateTime.Now.ToFileTime() + Config.banDuration;
+                                                    bannedIPList.Add(ban);
+                                                    WriteToFile("Banning");
                                                 }
                                             }
+                                            WriteToFile(ipAttempt[0].attemptCount.ToString());
+                                            FirewallUpdate();
                                         }
-                                        WriteToFile(ipAttempt[0].attemptCount.ToString());
-
                                     }
                                     break;
                             }
@@ -160,8 +273,16 @@ namespace IPABan
 
 
         void FirewallUpdate()
-        {            
-            FirewallManager.Instance.Rules.Remove(FindRule());
+        {
+            //WriteToFile("Updating firewall rule...");
+            IRule ruledel = FindRule();         
+            
+            
+            if(ruledel != null)
+            {
+                FirewallManager.Instance.Rules.Remove(ruledel);
+            }
+
             var rule = FirewallManager.Instance.CreateApplicationRule(
                   FirewallManager.Instance.GetProfile().Type,
                   @"IPABan",
@@ -174,9 +295,24 @@ namespace IPABan
             rule.Protocol = FirewallProtocol.Any;
             rule.Scope = FirewallScope.All;
             rule.Profiles = FirewallProfiles.Public | FirewallProfiles.Private;
+            IAddress[] banList;
 
 
-            rule.RemoteAddresses = bannedIP.ToArray();
+            if (bannedIPList.Count == 0)
+            {
+                banList = new IAddress[0];
+                banList[0] = SingleIP.Parse("0.0.0.0");
+            }
+            else
+            {
+                banList = new IAddress[bannedIPList.Count];
+                int i = 0;
+                foreach (BannedIP banned in bannedIPList)
+                {
+                    banList[i] = banned.ipAddress;
+                }
+            }          
+            rule.RemoteAddresses = banList;
             FirewallManager.Instance.Rules.Add(rule);
         }
 
@@ -243,6 +379,7 @@ namespace IPABan
 
         protected override void OnStop()
         {
+            WriteToFile("Service stopped. " + DateTime.Now);
         }
     }
 }
