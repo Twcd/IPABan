@@ -8,6 +8,6 @@ namespace IPABan
 {
     public static class Config
     {
-        static public int banDuration = 3600;
+        static public int banDuration = 360000;
     }
 }
