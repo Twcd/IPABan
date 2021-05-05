@@ -10,6 +10,13 @@ namespace IPABan
 {
     class IPDBApi
     {
+        public class Error
+        {
+            public string detail { get; set; }
+            public int status { get; set; }
+        }
+
+
         #region JSONClass
         public class Report
         {
@@ -42,6 +49,7 @@ namespace IPABan
 
         public class CheckIPRequest
         {
+            public List<Error> errors { get; set; }
             public Data data { get; set; }
         }
 
@@ -51,6 +59,7 @@ namespace IPABan
             public long timeStamp;
             public string ip;
             public int banAmount = 0;
+            public bool check = false;
         }
 
         public class Meta
@@ -75,7 +84,25 @@ namespace IPABan
 
         #endregion
 
+        string GetBlackList()
+        {
+            var client = new RestClient("https://api.abuseipdb.com/api/v2/blacklist");
+            var request = new RestRequest(Method.GET);
+            request.AddHeader("Key", Config.apiKey);
+            request.AddHeader("Accept", "application/json");
+            request.AddParameter("confidenceMinimum", "90");
 
+            IRestResponse response = client.Execute(request);
+
+            dynamic parsedJson = JsonConvert.DeserializeObject(response.Content);
+
+            foreach (var item in parsedJson)
+            {
+                Console.WriteLine(item);
+            }
+
+            return response.Content;
+        }
         public static bool CheckIP(string _ip)
         {
             try
@@ -92,16 +119,28 @@ namespace IPABan
                 IRestResponse response = client.Execute(request);
                 var json = JsonConvert.DeserializeObject<CheckIPRequest>(response.Content);
 
-                // WriteToFile(response.Content);
+                // Service1.WriteToFile(response.Content);
 
-                if (json.data.totalReports >= 3)
+                if (json.errors.Count > 0)
                 {
-                    ReportIP(_ip, "Attempt windows login");
-                    return false;                    
+                    Service1.WriteError("Error from IPDB");
+                    foreach (Error err in json.errors)
+                    {
+                        Service1.WriteError(err.detail);
+                    }
+                    return true;
                 }
                 else
                 {
-                    return true;
+                    if (json.data.totalReports >= 3)
+                    {
+                        ReportIP(_ip, "Attempt windows login");
+                        return false;
+                    }
+                    else
+                    {
+                        return true;
+                    }
                 }
             }
             catch (Exception e)
@@ -111,6 +150,7 @@ namespace IPABan
                 return true;
 
             }
+     
         }
 
 
@@ -119,7 +159,7 @@ namespace IPABan
             try
             {
 
-                Service1.WriteToFile("Reporting user");
+                Service1.WriteLog("Reporting user");
                 var client = new RestClient("https://api.abuseipdb.com/api/v2/report");
                 var request = new RestRequest(Method.POST);
                 request.AddHeader("Key", Config.apiKey);
