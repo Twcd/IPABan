@@ -1,7 +1,7 @@
 # IPABan
 IPABan prevent brute force via RDP protocol and all application using the windows Active Directory
 
-IPABan detect RDP connection attempt via the windows event log and block IP after 5 failed attempt with the Windows firewall.
+IPABan detect Active Directory logon attempt via the windows event log and block IP after 5 failed attempt with the Windows firewall.
 The program work as a windows service and he is very light (less  than 1MB for the moment)
 
 
