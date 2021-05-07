@@ -6,10 +6,12 @@ using System.Threading.Tasks;
 
 namespace IPABan
 {
-    public static class Config
+    public class Configuration
     {
-        static public int banDuration = 3600;
-        static public string apiKey = "";
-        static public int attemptPermaBan = 3;
+        public int banDuration = 3600;
+        public string IPDBapiKey = "";
+        public int attemptPermaBan = 3;
+        public int attempBeforeBan = 5;
+        public int debugLevel = 0;
     }
 }

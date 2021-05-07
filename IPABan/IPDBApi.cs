@@ -59,6 +59,7 @@ namespace IPABan
             public long timeStamp;
             public string ip;
             public int banAmount = 0;
+            public bool trusted = false;
             public bool check = false;
         }
 
@@ -88,7 +89,7 @@ namespace IPABan
         {
             var client = new RestClient("https://api.abuseipdb.com/api/v2/blacklist");
             var request = new RestRequest(Method.GET);
-            request.AddHeader("Key", Config.apiKey);
+            request.AddHeader("Key", Service1.Config.IPDBapiKey);
             request.AddHeader("Accept", "application/json");
             request.AddParameter("confidenceMinimum", "90");
 
@@ -107,10 +108,9 @@ namespace IPABan
         {
             try
             {
-
                 var client = new RestClient("https://api.abuseipdb.com/api/v2/check");
                 var request = new RestRequest(Method.GET);
-                request.AddHeader("Key", Config.apiKey);
+                request.AddHeader("Key", Service1.Config.IPDBapiKey);
                 request.AddHeader("Accept", "application/json");
                 request.AddParameter("ipAddress", _ip);
                 request.AddParameter("maxAgeInDays", "90");
@@ -121,7 +121,7 @@ namespace IPABan
 
                 // Service1.WriteToFile(response.Content);
 
-                if (json.errors.Count > 0)
+                if (json.errors != null)
                 {
                     Service1.WriteError("Error from IPDB");
                     foreach (Error err in json.errors)
@@ -162,7 +162,7 @@ namespace IPABan
                 Service1.WriteLog("Reporting user");
                 var client = new RestClient("https://api.abuseipdb.com/api/v2/report");
                 var request = new RestRequest(Method.POST);
-                request.AddHeader("Key", Config.apiKey);
+                request.AddHeader("Key", Service1.Config.IPDBapiKey);
                 request.AddHeader("Accept", "application/json");
                 request.AddParameter("ip", _reportip);
                 request.AddParameter("categories", "18");

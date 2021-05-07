@@ -8,26 +8,22 @@ using System.Collections.Generic;
 using WindowsFirewallHelper;
 using WindowsFirewallHelper.Addresses;
 using System.Threading;
-using RestSharp;
 using Newtonsoft.Json;
-using Formatting = Newtonsoft.Json.Formatting;
-using System.Net;
 
 namespace IPABan
 {
     public partial class Service1 : ServiceBase
     {
-
+        public static Configuration Config = new Configuration();
         public static List<String> LogProcess = new List<string>();
         public static List<String> ErrorProcess = new List<string>();
 
         class BannedIP
         {
-            public IAddress ipAddress;
+            public string ipAddress;
             public long expire;
         }
 
-        
 
 
 
@@ -39,28 +35,66 @@ namespace IPABan
             InitializeComponent();
         }
 
-
+      
         void BanIP(IAddress _ip, int _expire)
         {
+            bool Found = false;
             foreach(BannedIP b in bannedIPList)
             {
-                if(b.ipAddress == _ip)
-                {
-                    return;
+                //Dont work without the .ToString() I dont know why ...
+                if (b.ipAddress.ToString() == _ip.ToString())
+                {                    
+                    Found = true;
                 }
             }
-            
-            BannedIP ban = new BannedIP();
-            ban.ipAddress = _ip;
-            ban.expire = _expire;
-            bannedIPList.Add(ban);
-            WriteLog("Banning");
+            if(!Found)
+            {
+                BannedIP ban = new BannedIP();
+                ban.ipAddress = _ip.ToString();
+                ban.expire = _expire;
+                bannedIPList.Add(ban);
+                WriteLog("Banning : " + _ip + " Expire : " + _expire);
+            }
+            FirewallUpdate();
+
+        }
+        
+        void LoadBanList()
+        {
+            string BanListFile = AppDomain.CurrentDomain.BaseDirectory + "\\banlist.json";
+            if (File.Exists(BanListFile))
+            {
+                string fileText = File.ReadAllText(BanListFile);
+                List<BannedIP> loadedBanList = JsonConvert.DeserializeObject<List<BannedIP>>(fileText);
+                bannedIPList = loadedBanList;
+                FirewallUpdate();
+            }
         }
 
+        void LoadConfiguration()
+        {
+            string ConfigPath = AppDomain.CurrentDomain.BaseDirectory + "\\config.conf";
+            if(!File.Exists(ConfigPath))
+            {
+                string jsonString = JsonConvert.SerializeObject(Config, Newtonsoft.Json.Formatting.Indented);
+                File.WriteAllText(ConfigPath,jsonString);
+         
+                WriteToFile(jsonString);
+            }
+            else
+            {
+                string fileText = File.ReadAllText(ConfigPath);
+                Configuration loadedConf = JsonConvert.DeserializeObject<Configuration>(fileText);
+                Config = loadedConf;
+            }
+        }
 
         protected override void OnStart(string[] args)
         {
-            WriteToFile("Service is started. " + DateTime.Now);          
+            WriteToFile("Service is started. " + DateTime.Now);
+            LoadConfiguration();
+            LoadBanList();
+
             FindRule();
             RegisterListener();
             Thread trd = new Thread(new ThreadStart(this.FirewallUpdater));
@@ -80,6 +114,21 @@ namespace IPABan
         }
 
 
+        void UpdateBanFile()
+        {
+            string json = JsonConvert.SerializeObject(bannedIPList, Newtonsoft.Json.Formatting.Indented);
+            File.WriteAllText(AppDomain.CurrentDomain.BaseDirectory + "\\banlist.json", json);
+        }
+        void UpdateAttemptFile()
+        {
+            if (Config.debugLevel >= 2)
+            {
+                File.WriteAllText(AppDomain.CurrentDomain.BaseDirectory + "\\attemptsize.txt", ipAttempt.Count.ToString());
+                string json = JsonConvert.SerializeObject(ipAttempt, Newtonsoft.Json.Formatting.Indented);
+                File.WriteAllText(AppDomain.CurrentDomain.BaseDirectory + "\\attempt.txt", json);
+            }
+        }
+
         #region Threads
         void FirewallUpdater()
         {
@@ -88,10 +137,6 @@ namespace IPABan
                 try
                 {
                     Thread.Sleep(1000);
-
-                    //string json = JsonConvert.SerializeObject(bannedIPList, Formatting.Indented);
-
-                    //WriteLog(json.ToString());
                     List<BannedIP> ban = bannedIPList;
 
                     foreach (BannedIP ip in ban)
@@ -103,7 +148,6 @@ namespace IPABan
                                 WriteLog("unban ip : " + ip.ipAddress);
                                 bannedIPList.Remove(ip);
                                 FirewallUpdate();
-
                             }
                         }
                     }
@@ -120,19 +164,28 @@ namespace IPABan
         {
             try
             {
+                if(Config.IPDBapiKey == null)
+                {
+                    return;
+                }
                 if (!IPDBApi.CheckIP(ipAddress))
                 {
-                    ipAttempt[FindIP(ipAddress.ToString())].banAmount++;
-                    BanIP(SingleIP.Parse(ipAddress), (Int32)(DateTime.Now.Subtract(new DateTime(1970, 1, 1))).TotalSeconds + Config.banDuration);
-
-
+                    int idx = FindIP(ipAddress.ToString());
+                    ipAttempt[idx].banAmount++;
+                    BanIP(SingleIP.Parse(ipAddress), -1);
+                    ipAttempt[idx].trusted = false;
+                    ipAttempt[idx].check = true;
                     WriteLog("Banning from DB IP : " + ipAddress);
                     FirewallUpdate();
                 }
                 else
                 {
+                    int idx = FindIP(ipAddress.ToString());
                     //WriteLog("IP Trusted");
+                    ipAttempt[idx].trusted = true;
+                    ipAttempt[idx].check = true;
                 }
+              
             }
             catch (Exception e)
             {
@@ -145,6 +198,18 @@ namespace IPABan
             WriteToFile("Stating threadlog");
             while (true)
             {
+                //Debug================
+                if (Config.debugLevel >= 2)
+                {
+                    UpdateAttemptFile();
+                    string json = JsonConvert.SerializeObject(LogProcess, Newtonsoft.Json.Formatting.Indented);
+                    File.WriteAllText(AppDomain.CurrentDomain.BaseDirectory + "\\LogList.txt", json);
+                    string json1 = JsonConvert.SerializeObject(ErrorProcess, Newtonsoft.Json.Formatting.Indented);
+                    File.WriteAllText(AppDomain.CurrentDomain.BaseDirectory + "\\ErrorList.txt", json1);
+                    //=======================
+                }
+
+
                 Thread.Sleep(100);
 
                 try
@@ -184,7 +249,7 @@ namespace IPABan
        
         #region Writers
         public static void WriteLog(string _string)
-        {
+        {          
             LogProcess.Add(_string);            
         }
 
@@ -209,6 +274,8 @@ namespace IPABan
                 using (StreamWriter sw = File.CreateText(filePath))
                 {
                     sw.WriteLine(text);
+                    //sw.Close();
+                    sw.Flush();
                 }
             }
             else
@@ -216,8 +283,11 @@ namespace IPABan
                 using (StreamWriter sw = File.AppendText(filePath))
                 {
                     sw.WriteLine(text);
+                    //sw.Close();
+                    sw.Flush();
                 }
             }
+            
 
         }
 
@@ -287,26 +357,29 @@ namespace IPABan
                                     if (reader.GetAttribute(0) == "IpAddress")
                                     {                                       
                                         string ipAddress = reader.ReadElementContentAsString();
-                                        WriteLog("Connection attempts with IP : " + ipAddress);
-                                        var t = new Thread(() => CheckThread(ipAddress));
-                                        t.Start();
-                                       
-
-
-                                        int idxIP = FindIP(ipAddress);
+                                        
+                                        
+                                        int idxIP = FindIP(ipAddress);      
                                         if (idxIP == -1)
                                         {
+                                            var t = new Thread(() => CheckThread(ipAddress));
+                                            t.Start();
                                             IPDBApi.ipStat newStat = new IPDBApi.ipStat();
                                             newStat.timeStamp = (Int32)(DateTime.Now.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
                                             newStat.ip = ipAddress;
                                             newStat.attemptCount = 1;
-                                            newStat.banAmount++;
-                                            ipAttempt.Add(newStat);
+                                            newStat.banAmount = 1;
+                                            ipAttempt.Add(newStat);    
                                         }
                                         else
                                         {
+                                            if (!ipAttempt[idxIP].check)
+                                            {
+                                                var t = new Thread(() => CheckThread(ipAddress));
+                                                t.Start();
+                                            }
                                             ipAttempt[idxIP].attemptCount++;
-                                            if (ipAttempt[idxIP].attemptCount >= 5)
+                                            if (ipAttempt[idxIP].attemptCount >= Config.attempBeforeBan)
                                             {
                                                 if(ipAttempt[idxIP].banAmount >= Config.attemptPermaBan)
                                                 {
@@ -325,10 +398,10 @@ namespace IPABan
                                                     Reporter.Start();
                                                 }
                                             }
-                                        }
-                                        WriteLog("Attemps : " + ipAttempt[idxIP].attemptCount.ToString());
-                                        FirewallUpdate();
+                                        }                                        
 
+                                        WriteLog("IP :" + ipAttempt[idxIP].ip + " Attemps : " + ipAttempt[idxIP].attemptCount.ToString());
+                                        
                                     }
                                     break;
                             }
@@ -388,13 +461,13 @@ namespace IPABan
                   
                     foreach (BannedIP banned in bannedIPList)
                     {                        
-                        banList[i] = banned.ipAddress;
+                        banList[i] = SingleIP.Parse(banned.ipAddress);
                         i++;
                     }
                 }          
                 rule.RemoteAddresses = banList;
                 FirewallManager.Instance.Rules.Add(rule);
-
+                UpdateBanFile();
 
             }
             catch (Exception e)
@@ -436,7 +509,7 @@ namespace IPABan
                 WriteError(e.Message);
                 return null;
             }
-                }
+        }
 
         int FindIP(string _ip)
         {
