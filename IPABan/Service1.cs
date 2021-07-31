@@ -90,7 +90,8 @@ namespace IPABan
         }
 
         protected override void OnStart(string[] args)
-        {
+        {           
+
             WriteToFile("Service is started. " + DateTime.Now);
             LoadConfiguration();
             LoadBanList();
@@ -355,10 +356,17 @@ namespace IPABan
 
                                     }
                                     if (reader.GetAttribute(0) == "IpAddress")
-                                    {                                       
+                                    {                     
+                                                                               
+
                                         string ipAddress = reader.ReadElementContentAsString();
-                                        
-                                        
+                                        if (CheckFilter(ipAddress))
+                                        {
+                                            WriteLog("Ignore IP : " + ipAddress);
+                                            return;
+                                        }
+
+
                                         int idxIP = FindIP(ipAddress);      
                                         if (idxIP == -1)
                                         {
@@ -415,6 +423,31 @@ namespace IPABan
                 }
             }
         }
+
+        bool CheckFilter(string _ip)
+        {
+            string[] ip = _ip.Split('.');
+            foreach(string s in Config.filterIp)
+            {
+                string[] spl = s.Split('.');
+                if(spl[0] == ip[0] || spl[0] == "*")
+                {
+                    if (spl[1] == ip[1] || spl[1] == "*")
+                    {
+                        if (spl[2] == ip[2] || spl[2] == "*")
+                        {
+                            if (spl[3] == ip[3] || spl[3] == "*")
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                }           
+            }
+
+            return false;
+        }
+
 
         void FirewallUpdate()
         {

@@ -13,5 +13,6 @@ namespace IPABan
         public int attemptPermaBan = 3;
         public int attempBeforeBan = 5;
         public int debugLevel = 0;
+        public string[] filterIp = { "10.0.0.*", "127.0.0.1" };
     }
 }
