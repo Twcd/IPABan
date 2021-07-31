@@ -19,7 +19,11 @@ This is the default configuration file. This file will be created when you start
   "IPDBapiKey": "",
   "attemptPermaBan": 3,
   "attempBeforeBan": 5,
-  "debugLevel": 0
+  "debugLevel": 0,
+   "filterIp": [
+    "10.0.0.*",
+    "127.0.0.1"
+  ]
 }
 ```
 
